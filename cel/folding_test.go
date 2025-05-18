@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/google/cel-go/common/ast"
+	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 
 	proto3pb "github.com/google/cel-go/test/proto3pb"
@@ -279,14 +280,58 @@ func TestConstantFoldingOptimizer(t *testing.T) {
 			expr:   `1 + 2 + x ==  x + 2 + 1`,
 			folded: `3 + x == x + 2 + 1`,
 		},
+		{
+			expr:   `google.expr.proto3.test.ImportedGlobalEnum.IMPORT_BAR`,
+			folded: `1`,
+		},
+		{
+			expr:   `c == google.expr.proto3.test.ImportedGlobalEnum.IMPORT_BAZ ? "BAZ" : "Unknown"`,
+			folded: `"BAZ"`,
+		},
+		{
+			expr: `[
+						google.expr.proto3.test.ImportedGlobalEnum.IMPORT_BAR,
+						c,
+						google.expr.proto3.test.ImportedGlobalEnum.IMPORT_FOO
+					].exists(e, e == google.expr.proto3.test.ImportedGlobalEnum.IMPORT_FOO)
+						? "has Foo" : "no Foo"`,
+			folded: `"has Foo"`,
+		},
+		{
+			expr:   `l.exists(e, e == "foo") ? "has Foo" : "no Foo"`,
+			folded: `"has Foo"`,
+		},
+		{
+			expr:   `"foo" in l`,
+			folded: `true`,
+		},
+		{
+			expr:   `o.repeated_int32`,
+			folded: `[1, 2, 3]`,
+		},
 	}
 	e, err := NewEnv(
 		OptionalTypes(),
 		EnableMacroCallTracking(),
 		Types(&proto3pb.TestAllTypes{}),
-		Variable("x", DynType))
+		Variable("x", DynType),
+		Constant("c", IntType, types.Int(proto3pb.ImportedGlobalEnum_IMPORT_BAZ)),
+	)
 	if err != nil {
 		t.Fatalf("NewEnv() failed: %v", err)
+	}
+	e, err = e.Extend(
+		Constant("l", ListType(StringType), types.NewStringList(e.adapter, []string{"foo", "bar", "baz"})),
+	)
+	if err != nil {
+		t.Fatalf("Extend() failed: %v", err)
+	}
+	e, err = e.Extend(
+		Constant("o", ObjectType("google.expr.proto3.test.TestAllTypes"),
+			e.adapter.NativeToValue(&proto3pb.TestAllTypes{RepeatedInt32: []int32{1, 2, 3}})),
+	)
+	if err != nil {
+		t.Fatalf("Extend() failed: %v", err)
 	}
 	for _, tst := range tests {
 		tc := tst

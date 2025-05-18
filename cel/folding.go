@@ -476,6 +476,13 @@ func constantExprMatcher(ctx *OptimizerContext, a *ast.AST, e ast.NavigableExpr)
 	case ast.SelectKind:
 		sel := e.AsSelect() // guaranteed to be a navigable value
 		return constantMatcher(sel.Operand().(ast.NavigableExpr))
+	case ast.IdentKind:
+		info := a.ReferenceMap()[e.ID()]
+		if info != nil && info.Value != nil {
+			_, err := adaptLiteral(ctx, info.Value)
+			return err == nil
+		}
+		return false
 	case ast.ComprehensionKind:
 		if isNestedComprehension(e) {
 			return false
