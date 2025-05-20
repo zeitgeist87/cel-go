@@ -320,16 +320,21 @@ func TestConstantFoldingOptimizer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEnv() failed: %v", err)
 	}
-	e, err = e.Extend(
-		Constant("l", ListType(StringType), types.NewStringList(e.adapter, []string{"foo", "bar", "baz"})),
-	)
+	e, err = e.Extend(Variable("l", ListType(StringType)))
 	if err != nil {
 		t.Fatalf("Extend() failed: %v", err)
 	}
-	e, err = e.Extend(
-		Constant("o", ObjectType("google.expr.proto3.test.TestAllTypes"),
-			e.adapter.NativeToValue(&proto3pb.TestAllTypes{RepeatedInt32: []int32{1, 2, 3}})),
-	)
+	e, err = e.Extend(Variable("o", ObjectType("google.expr.proto3.test.TestAllTypes")))
+	if err != nil {
+		t.Fatalf("Extend() failed: %v", err)
+	}
+	e, err = e.Extend(func(e *Env) (*Env, error) {
+		e.progOpts = append(e.progOpts, Globals(map[string]any{
+			"o": &proto3pb.TestAllTypes{RepeatedInt32: []int32{1, 2, 3}},
+			"l": []string{"foo", "bar", "baz"},
+		}))
+		return e, nil
+	})
 	if err != nil {
 		t.Fatalf("Extend() failed: %v", err)
 	}
@@ -339,6 +344,10 @@ func TestConstantFoldingOptimizer(t *testing.T) {
 			checked, iss := e.Compile(tc.expr)
 			if iss.Err() != nil {
 				t.Fatalf("Compile() failed: %v", iss.Err())
+			}
+			protoChecked, err := AstToCheckedExpr(checked)
+			if err != nil && protoChecked == nil {
+				t.Fatalf("CompileProto() failed: %v", err)
 			}
 			folder, err := NewConstantFoldingOptimizer()
 			if err != nil {

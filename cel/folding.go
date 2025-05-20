@@ -84,7 +84,7 @@ func (opt *constantFoldingOptimizer) Optimize(ctx *OptimizerContext, a *ast.AST)
 			}
 			// Otherwise, assume all context is needed to evaluate the expression.
 			err := tryFold(ctx, a, fold)
-			if err != nil {
+			if err != nil && fold.Kind() != ast.IdentKind {
 				ctx.ReportErrorAtID(fold.ID(), "constant-folding evaluation failed: %v", err.Error())
 				return a
 			}
@@ -478,11 +478,7 @@ func constantExprMatcher(ctx *OptimizerContext, a *ast.AST, e ast.NavigableExpr)
 		return constantMatcher(sel.Operand().(ast.NavigableExpr))
 	case ast.IdentKind:
 		info := a.ReferenceMap()[e.ID()]
-		if info != nil && info.Value != nil {
-			_, err := adaptLiteral(ctx, info.Value)
-			return err == nil
-		}
-		return false
+		return info != nil
 	case ast.ComprehensionKind:
 		if isNestedComprehension(e) {
 			return false
